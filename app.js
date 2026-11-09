@@ -4,13 +4,16 @@ import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, on
 import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, doc, updateDoc, serverTimestamp, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
- apiKey: "AIzaSyA978XK0Y_WgTInbMYdT-e-vqtj3JfbHVc",
+ // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyA978XK0Y_WgTInbMYdT-e-vqtj3JfbHVc",
   authDomain: "jalima-express.firebaseapp.com",
   projectId: "jalima-express",
   storageBucket: "jalima-express.firebasestorage.app",
   messagingSenderId: "835358362737",
   appId: "1:835358362737:web:fe249e97f8d1ee37cd5fd0",
-  measurementId: "G-NSXPM9JRTQ" 
+  measurementId: "G-NSXPM9JRTQ"
+}; 
 };
 const configured = !Object.values(firebaseConfig).some(v => String(v).includes("REEMPLAZA"));
 const $ = id => document.getElementById(id);
