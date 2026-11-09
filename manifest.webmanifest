@@ -1,0 +1,18 @@
+{
+  "name": "JALIMA EXPRESS",
+  "short_name": "JALIMA",
+  "description": "Gestión de pedidos y entregas",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f5f7",
+  "theme_color": "#f47721",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

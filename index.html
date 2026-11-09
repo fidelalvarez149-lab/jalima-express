@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f47721">
+  <meta name="description" content="Gestión de pedidos y rutas de JALIMA EXPRESS">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css">
+  <title>JALIMA EXPRESS</title>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img id="brandLogo" src="./icon.svg" alt="Logotipo">
+      <div><h1 id="brandName">JALIMA EXPRESS</h1><small>Pedidos y entregas</small></div>
+    </div>
+    <button id="logoutBtn" class="secondary hidden">Cerrar sesión</button>
+  </header>
+
+  <main>
+    <section id="setupNotice" class="notice hidden">
+      <h2>Falta conectar Firebase</h2>
+      <p>Abre <code>app.js</code> y reemplaza los valores de <code>firebaseConfig</code> por los de tu proyecto Firebase. Sigue los pasos de README.md.</p>
+    </section>
+
+    <section id="authPanel" class="panel">
+      <h2>Ingresar a JALIMA EXPRESS</h2>
+      <form id="authForm">
+        <label>Correo electrónico<input id="email" type="email" required autocomplete="username"></label>
+        <label>Contraseña<input id="password" type="password" required minlength="6" autocomplete="current-password"></label>
+        <div class="row">
+          <button type="submit">Iniciar sesión</button>
+          <button type="button" id="registerBtn" class="secondary">Crear cuenta</button>
+        </div>
+      </form>
+      <p class="hint">Crea una cuenta para el teléfono que recibe pedidos y otra para el repartidor.</p>
+      <p id="authMessage" class="message" aria-live="polite"></p>
+    </section>
+
+    <section id="appPanel" class="hidden">
+      <div class="welcome row">
+        <div><h2 id="welcomeTitle">Panel de pedidos</h2><p id="userRole" class="hint"></p></div>
+        <span id="connectionState" class="badge">Conectando…</span>
+      </div>
+
+      <section id="newOrderPanel" class="panel">
+        <h2>Registrar pedido</h2>
+        <form id="orderForm" class="grid">
+          <label>Nombre del cliente<input id="customer" required maxlength="80"></label>
+          <label>Teléfono / WhatsApp<input id="phone" type="tel" required maxlength="25"></label>
+          <label class="wide">Dirección de entrega<input id="address" required maxlength="220"></label>
+          <label class="wide">Producto / detalle del pedido<textarea id="details" rows="2" required maxlength="500"></textarea></label>
+          <label>Monto del pedido (C$)<input id="amount" type="number" min="0" step="0.01" required></label>
+          <label>Costo de delivery (C$)<input id="deliveryFee" type="number" min="0" step="0.01" value="0" required></label>
+          <label>Latitud (opcional)<input id="lat" type="number" step="any" placeholder="Ej. 12.1364"></label>
+          <label>Longitud (opcional)<input id="lng" type="number" step="any" placeholder="Ej. -86.2514"></label>
+          <div class="wide row">
+            <button type="button" id="locateAddressBtn" class="secondary">Usar ubicación de este teléfono</button>
+            <button type="submit">ENVIAR PEDIDO</button>
+          </div>
+        </form>
+        <p id="orderMessage" class="message" aria-live="polite"></p>
+      </section>
+
+      <section class="panel">
+        <div class="row listHeading">
+          <div><h2>Pedidos y ruta</h2><p class="hint">Los pedidos nuevos aparecen en tiempo real en los dispositivos conectados.</p></div>
+          <button id="sortRouteBtn" class="secondary">Ordenar desde mi ubicación</button>
+        </div>
+        <div class="filters">
+          <button data-filter="pending" class="filter active">Pendientes</button>
+          <button data-filter="in_route" class="filter">En reparto</button>
+          <button data-filter="delivered" class="filter">Entregados</button>
+          <button data-filter="all" class="filter">Todos</button>
+        </div>
+        <div id="ordersList" class="orders"><p class="hint">Cargando pedidos…</p></div>
+      </section>
+
+      <section class="panel settings">
+        <h2>Personalizar negocio</h2>
+        <div class="grid">
+          <label>Nombre del negocio<input id="businessName" maxlength="60" placeholder="JALIMA EXPRESS"></label>
+          <label>Color principal<input id="businessColor" type="color" value="#f47721"></label>
+          <label class="wide">Logotipo<input id="logoFile" type="file" accept="image/*"></label>
+          <div class="wide"><button id="saveSettingsBtn" type="button" class="secondary">Guardar personalización</button></div>
+        </div>
+        <p class="hint">La personalización se guarda en este navegador en esta versión inicial.</p>
+      </section>
+    </section>
+  </main>
+
+  <footer>JALIMA EXPRESS · Versión inicial</footer>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
