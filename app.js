@@ -12,12 +12,13 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
-  apiKey: "TU_API_KEY",
-  authDomain: "TU_PROYECTO.firebaseapp.com",
-  projectId: "TU_PROJECT_ID",
-  storageBucket: "TU_PROYECTO.appspot.com",
-  messagingSenderId: "TU_SENDER_ID",
-  appId: "TU_APP_ID"
+  apiKey: "AIzaSyA978XK0Y_WgTInbMYdT-e-vqtj3JfbHVc",
+  authDomain: "jalima-express.firebaseapp.com",
+  projectId: "jalima-express",
+  storageBucket: "jalima-express.firebasestorage.app",
+  messagingSenderId: "835358362737",
+  appId: "1:835358362737:web:fe249e97f8d1ee37cd5fd0",
+  measurementId: "G-NSXPM9JRTQ"
 };
 
 // ---------- Utilidades ----------
