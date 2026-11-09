@@ -1,63 +1,44 @@
-# JALIMA EXPRESS — primera versión multiplataforma
+# JALIMA EXPRESS — Pedidos y entregas
 
-Esta carpeta contiene una **aplicación web progresiva (PWA)**. Se puede abrir en Android, iPhone y computadora desde un navegador. En teléfonos compatibles se puede instalar en la pantalla de inicio. No es todavía una app nativa publicada en Google Play o App Store.
+App web (funciona como PWA en el celular) con dos tipos de cuenta:
 
-## Qué incluye esta primera versión
+- **Teléfono que recibe pedidos** (negocio): registra pedidos y ve su estado en tiempo real.
+- **Repartidor**: ve pedidos disponibles, toma uno, sale a entregar y lo marca como entregado.
 
-- Inicio de sesión con correo y contraseña usando Firebase Authentication.
-- Primera cuenta creada: perfil de administrador/recepción.
-- Cuentas posteriores: perfil de repartidor.
-- Registro y sincronización en tiempo real de pedidos entre dispositivos.
-- Datos del cliente, teléfono, dirección, detalle, monto y costo de delivery.
-- Estados: pendiente, en reparto y entregado.
-- Ubicación GPS opcional para cada pedido.
-- Apertura de un destino en Google Maps.
-- Orden sugerido de paradas por cercanía geográfica desde la ubicación actual.
-- Personalización local inicial de nombre, color y logotipo.
+Los montos están en córdobas (C$).
 
-## Lo que requiere una segunda fase
+## 1. Crear el proyecto en Firebase
 
-La ruta actual usa distancia geográfica aproximada (línea recta); **no** calcula todavía la ruta vial óptima ni dibuja una ruta completa sobre un mapa integrado. Para eso se integrará Google Maps Routes/Directions y geocodificación.
+1. Entra a https://console.firebase.google.com y crea un proyecto.
+2. **Authentication → Comenzar → Correo electrónico/contraseña → Habilitar**.
+3. **Firestore Database → Crear base de datos** (modo producción, región cercana).
+4. En Firestore ve a **Reglas**, pega el contenido de `firestore.rules` y pulsa **Publicar**.
+5. **Configuración del proyecto (⚙) → Tus apps → Web (`</>`)**, registra la app y copia el objeto `firebaseConfig`.
 
-El envío automático de WhatsApp no está activado. Requiere una cuenta de WhatsApp Business Platform/Cloud API, plantillas aprobadas y un backend seguro (por ejemplo Firebase Cloud Functions). No se deben guardar tokens de WhatsApp en archivos públicos de GitHub.
+## 2. Conectar la app
 
-El código de invitación, administración avanzada de roles, notificaciones push, sincronización del logotipo/tema entre todos los dispositivos y controles de seguridad de producción también se implementarán en fases posteriores.
+Abre `app.js` y reemplaza los valores de `firebaseConfig` (los que empiezan con `TU_`) por los que copiaste. Cuando estén bien puestos, el aviso naranja "Falta conectar Firebase" desaparece solo.
 
-## Publicar con GitHub Pages desde Android
+## 3. Publicar o probar
 
-1. En GitHub crea un repositorio nuevo llamado `jalima-express`.
-2. Sube todos los archivos de esta carpeta a la raíz del repositorio.
-3. Entra en **Settings → Pages**.
-4. En **Build and deployment**, selecciona **Deploy from a branch**.
-5. Selecciona la rama `main` y la carpeta `/ (root)`, y guarda.
-6. Espera a que GitHub Pages publique el sitio. La dirección será parecida a `https://TU-USUARIO.github.io/jalima-express/`.
+La app usa módulos ES, así que **no funciona abriendo `index.html` con doble clic** (`file://`). Opciones:
 
-GitHub Pages solo aloja la interfaz. Firebase es necesario para que los pedidos se compartan entre teléfonos.
+- **Probar en la PC:** `python3 -m http.server 8000` dentro de la carpeta y abre http://localhost:8000
+- **Publicar gratis:** Firebase Hosting (`firebase deploy`), Netlify, Vercel o GitHub Pages.
 
-## Configurar Firebase
+En Firebase: **Authentication → Configuración → Dominios autorizados** agrega el dominio donde publiques.
 
-1. Entra en https://console.firebase.google.com/ y crea un proyecto llamado `jalima-express`.
-2. Agrega una aplicación web al proyecto y copia el objeto de configuración que Firebase muestra.
-3. En Firebase habilita **Authentication → Sign-in method → Email/Password**.
-4. Crea una base de datos en **Firestore Database**.
-5. Copia el contenido de `firestore.rules` en la pestaña **Rules** de Firestore y publica las reglas.
-6. Abre `app.js` en GitHub y reemplaza los valores `REEMPLAZA...` dentro de `firebaseConfig` con los datos reales de tu proyecto.
-7. Guarda los cambios y espera a que GitHub Pages vuelva a publicar.
+## 4. Usar
 
-**Importante:** estas reglas son solo para una prueba inicial. Antes de utilizar datos reales, hay que reforzar los permisos y validar los roles desde un backend. No uses datos sensibles de clientes hasta completar esa etapa.
+1. En un teléfono: **Crear cuenta** → tipo "Teléfono que recibe pedidos".
+2. En otro teléfono: **Crear cuenta** → tipo "Repartidor".
+3. El negocio registra pedidos; el repartidor los ve al instante.
 
-## Crear las dos cuentas
+## Archivos
 
-1. Abre la dirección publicada en el primer teléfono y crea la primera cuenta: será la cuenta administradora que registra pedidos.
-2. En el segundo teléfono abre la misma dirección y crea otra cuenta: tendrá perfil de repartidor.
-3. Ambos dispositivos deben tener internet e iniciar sesión. Los pedidos se sincronizan mediante Firestore.
-
-## Instalar en el teléfono
-
-- **Android:** abre el sitio en Chrome, menú ⋮ → “Instalar aplicación” o “Agregar a pantalla principal”.
-- **iPhone:** abre el sitio en Safari, botón Compartir → “Añadir a pantalla de inicio”.
-- **Computadora:** abre la dirección en Chrome, Edge o Safari.
-
-## Nota sobre el logotipo
-
-La personalización de logotipo de esta versión se guarda localmente en el navegador. La siguiente fase debe moverla a Firebase Storage para que se actualice en todos los dispositivos.
+| Archivo | Para qué sirve |
+|---|---|
+| `index.html` | Pantallas |
+| `styles.css` | Estilos |
+| `app.js` | Lógica y conexión a Firebase |
+| `firestore.rules` | Reglas de seguridad de la base de datos |

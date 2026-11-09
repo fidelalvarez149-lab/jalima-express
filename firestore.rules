@@ -1,18 +1,45 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedIn() { return request.auth != null; }
 
-    // Reglas iniciales para pruebas. Antes de usar con clientes reales,
-    // restringe creación de usuarios/roles y permisos por función.
-    match /users/{userId} {
-      allow read, write: if signedIn() && request.auth.uid == userId;
+    function entro() { return request.auth != null; }
+    function rol() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.rol;
     }
-    match /appMeta/{docId} {
-      allow read, write: if signedIn();
+
+    match /users/{uid} {
+      allow read: if entro() && request.auth.uid == uid;
+      allow create: if entro() && request.auth.uid == uid
+                    && request.resource.data.rol in ['negocio', 'repartidor'];
+      allow update, delete: if false;
     }
-    match /orders/{orderId} {
-      allow read, create, update: if signedIn();
+
+    match /pedidos/{id} {
+      allow read: if entro() &&
+        (resource.data.creadoPor == request.auth.uid || rol() == 'repartidor');
+
+      allow create: if entro() && rol() == 'negocio'
+                    && request.resource.data.creadoPor == request.auth.uid
+                    && request.resource.data.estado == 'nuevo';
+
+      allow update: if entro() && (
+        // El negocio puede cancelar su pedido mientras esté nuevo
+        (resource.data.creadoPor == request.auth.uid
+          && resource.data.estado == 'nuevo'
+          && request.resource.data.estado == 'cancelado')
+        ||
+        // El repartidor toma un pedido nuevo
+        (rol() == 'repartidor'
+          && resource.data.estado == 'nuevo'
+          && request.resource.data.estado == 'asignado'
+          && request.resource.data.repartidorId == request.auth.uid)
+        ||
+        // El repartidor avanza su propio pedido
+        (rol() == 'repartidor'
+          && resource.data.repartidorId == request.auth.uid
+          && request.resource.data.estado in ['en_camino', 'entregado'])
+      );
+
       allow delete: if false;
     }
   }

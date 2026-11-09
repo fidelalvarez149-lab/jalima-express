@@ -1,134 +1,319 @@
-// JALIMA EXPRESS - primera versión. Configura Firebase en el objeto siguiente.
+// JALIMA EXPRESS — Pedidos y entregas
+// 1) Reemplaza los valores de firebaseConfig por los de tu proyecto (ver README.md).
+
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, doc, updateDoc, serverTimestamp, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {
+  getAuth, onAuthStateChanged, signInWithEmailAndPassword,
+  createUserWithEmailAndPassword, signOut
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {
+  getFirestore, collection, doc, setDoc, getDoc, addDoc, updateDoc,
+  onSnapshot, query, where, serverTimestamp, runTransaction
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
- // For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
-  apiKey: "AIzaSyA978XK0Y_WgTInbMYdT-e-vqtj3JfbHVc",
-  authDomain: "jalima-express.firebaseapp.com",
-  projectId: "jalima-express",
-  storageBucket: "jalima-express.firebasestorage.app",
-  messagingSenderId: "835358362737",
-  appId: "1:835358362737:web:fe249e97f8d1ee37cd5fd0",
-  measurementId: "G-NSXPM9JRTQ"
-}; 
+  apiKey: "TU_API_KEY",
+  authDomain: "TU_PROYECTO.firebaseapp.com",
+  projectId: "TU_PROJECT_ID",
+  storageBucket: "TU_PROYECTO.appspot.com",
+  messagingSenderId: "TU_SENDER_ID",
+  appId: "TU_APP_ID"
 };
-const configured = !Object.values(firebaseConfig).some(v => String(v).includes("REEMPLAZA"));
-const $ = id => document.getElementById(id);
-const statusNames = {pending:"Pendiente", in_route:"En reparto", delivered:"Entregado"};
-let auth, db, currentUser=null, userProfile=null, allOrders=[], activeFilter="pending", unsubscribeOrders=null, myPosition=null;
 
-if (!configured) $("setupNotice").classList.remove("hidden");
-else {
+// ---------- Utilidades ----------
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const dinero = (n) => "C$ " + Number(n || 0).toLocaleString("es-NI", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const ESTADOS = {
+  nuevo: "Nuevo", asignado: "Asignado", en_camino: "En camino",
+  entregado: "Entregado", cancelado: "Cancelado"
+};
+
+let toastTimer;
+function aviso(texto, esError = false) {
+  const t = $("mensaje");
+  t.textContent = texto;
+  t.className = "toast" + (esError ? " error" : "");
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.hidden = true; }, 4000);
+}
+
+function errorAmigable(e) {
+  const m = {
+    "auth/invalid-email": "El correo no es válido.",
+    "auth/missing-password": "Escribe la contraseña.",
+    "auth/weak-password": "La contraseña debe tener al menos 6 caracteres.",
+    "auth/email-already-in-use": "Ese correo ya tiene una cuenta.",
+    "auth/invalid-credential": "Correo o contraseña incorrectos.",
+    "auth/user-not-found": "Correo o contraseña incorrectos.",
+    "auth/wrong-password": "Correo o contraseña incorrectos.",
+    "auth/too-many-requests": "Demasiados intentos. Espera un momento.",
+    "auth/network-request-failed": "Sin conexión a internet.",
+    "permission-denied": "No tienes permiso para esta acción (revisa las reglas de Firestore)."
+  };
+  return m[e?.code] || "Ocurrió un error: " + (e?.message || e);
+}
+
+function mostrarVista(nombre) {
+  for (const v of ["vista-auth", "vista-negocio", "vista-repartidor"]) {
+    $(v).hidden = v !== nombre;
+  }
+  $("btn-salir").hidden = nombre === "vista-auth" || nombre === null;
+}
+
+// ---------- Firebase ----------
+const configurado = !Object.values(firebaseConfig).some((v) => String(v).startsWith("TU_"));
+
+if (!configurado) {
+  $("aviso-firebase").hidden = false;
+  mostrarVista("vista-auth");
+  $("form-auth").addEventListener("submit", (e) => {
+    e.preventDefault();
+    aviso("Primero conecta Firebase en app.js.", true);
+  });
+  $("btn-alternar").addEventListener("click", () => aviso("Primero conecta Firebase en app.js.", true));
+} else {
+  iniciarApp();
+}
+
+function iniciarApp() {
   const app = initializeApp(firebaseConfig);
-  auth = getAuth(app); db = getFirestore(app);
-  onAuthStateChanged(auth, async user => {
-    currentUser=user;
-    $("authPanel").classList.toggle("hidden",!!user);
-    $("appPanel").classList.toggle("hidden",!user);
-    $("logoutBtn").classList.toggle("hidden",!user);
-    if (!user) { if(unsubscribeOrders) unsubscribeOrders(); return; }
-    const profileRef=doc(db,"users",user.uid);
-    const profileSnap=await getDoc(profileRef);
-    if(!profileSnap.exists()){
-      // Primera cuenta creada queda como administradora. Las demás quedan como repartidoras.
-      const firstAccount = (await getDoc(doc(db,"appMeta","bootstrap"))).exists()===false;
-      userProfile={role:firstAccount?"admin":"delivery",email:user.email};
-      await setDoc(profileRef,userProfile);
-      if(firstAccount) await setDoc(doc(db,"appMeta","bootstrap"),{owner:user.uid});
-    } else userProfile=profileSnap.data();
-    $("userRole").textContent = userProfile.role==="admin" ? "Administrador / recepción de pedidos" : "Repartidor";
-    $("newOrderPanel").classList.toggle("hidden",userProfile.role!=="admin");
-    $("welcomeTitle").textContent=userProfile.role==="admin"?"Panel de recepción":"Panel del repartidor";
-    $("connectionState").textContent="Conectado";
-    listenOrders();
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+
+  let usuario = null;          // { uid, nombre, rol }
+  let modoRegistro = false;
+  let registrando = false;
+  let desuscribir = null;
+  let pedidos = [];
+  let pestana = "disponibles";
+
+  // ----- Login / registro -----
+  function setModo(registro) {
+    modoRegistro = registro;
+    $("campos-registro").hidden = !registro;
+    $("auth-titulo").textContent = registro ? "Crear cuenta" : "Ingresar a JALIMA EXPRESS";
+    $("btn-principal").textContent = registro ? "Registrarme" : "Iniciar sesión";
+    $("btn-alternar").textContent = registro ? "Ya tengo cuenta" : "Crear cuenta";
+    $("password").autocomplete = registro ? "new-password" : "current-password";
+  }
+  $("btn-alternar").addEventListener("click", () => setModo(!modoRegistro));
+
+  $("form-auth").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const email = $("email").value.trim();
+    const password = $("password").value;
+    if (!email || !password) return aviso("Escribe correo y contraseña.", true);
+
+    const btn = $("btn-principal");
+    btn.disabled = true;
+    try {
+      if (modoRegistro) {
+        const nombre = $("nombre").value.trim();
+        const rol = $("rol").value;
+        if (!nombre) { btn.disabled = false; return aviso("Escribe tu nombre.", true); }
+        registrando = true;
+        const cred = await createUserWithEmailAndPassword(auth, email, password);
+        await setDoc(doc(db, "users", cred.user.uid), {
+          nombre, rol, email, creadoEn: serverTimestamp()
+        });
+        registrando = false;
+        await entrar(cred.user);
+      } else {
+        await signInWithEmailAndPassword(auth, email, password);
+      }
+    } catch (err) {
+      registrando = false;
+      aviso(errorAmigable(err), true);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  $("btn-salir").addEventListener("click", () => signOut(auth));
+
+  onAuthStateChanged(auth, async (user) => {
+    if (registrando) return; // el registro llama a entrar() al terminar
+    if (!user) return salir();
+    await entrar(user);
+  });
+
+  async function entrar(user) {
+    try {
+      const snap = await getDoc(doc(db, "users", user.uid));
+      if (!snap.exists()) {
+        aviso("Tu cuenta no tiene perfil. Crea una cuenta nueva.", true);
+        await signOut(auth);
+        return;
+      }
+      usuario = { uid: user.uid, ...snap.data() };
+      $("form-auth").reset();
+      setModo(false);
+      if (usuario.rol === "repartidor") {
+        mostrarVista("vista-repartidor");
+        escucharRepartidor();
+      } else {
+        mostrarVista("vista-negocio");
+        escucharNegocio();
+      }
+    } catch (err) {
+      aviso(errorAmigable(err), true);
+    }
+  }
+
+  function salir() {
+    if (desuscribir) { desuscribir(); desuscribir = null; }
+    usuario = null;
+    pedidos = [];
+    mostrarVista("vista-auth");
+  }
+
+  // ----- Datos en tiempo real -----
+  const ms = (p) => p.creadoEn?.toMillis?.() ?? Date.now();
+
+  function escuchar(q, render) {
+    if (desuscribir) desuscribir();
+    desuscribir = onSnapshot(q, (snap) => {
+      pedidos = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => ms(b) - ms(a));
+      render();
+    }, (err) => aviso(errorAmigable(err), true));
+  }
+
+  function escucharNegocio() {
+    escuchar(query(collection(db, "pedidos"), where("creadoPor", "==", usuario.uid)), renderNegocio);
+  }
+  function escucharRepartidor() {
+    escuchar(collection(db, "pedidos"), renderRepartidor);
+  }
+
+  // ----- Negocio -----
+  $("form-pedido").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const cliente = $("p-cliente").value.trim();
+    const telefono = $("p-telefono").value.trim();
+    const direccion = $("p-direccion").value.trim();
+    const detalle = $("p-detalle").value.trim();
+    const monto = Number($("p-monto").value) || 0;
+    if (!cliente || !telefono || !direccion || !detalle) {
+      return aviso("Completa cliente, teléfono, dirección y detalle.", true);
+    }
+    try {
+      await addDoc(collection(db, "pedidos"), {
+        cliente, telefono, direccion, detalle, monto,
+        estado: "nuevo",
+        creadoPor: usuario.uid,
+        negocio: usuario.nombre,
+        repartidorId: null,
+        repartidorNombre: null,
+        creadoEn: serverTimestamp()
+      });
+      e.target.reset();
+      $("p-monto").value = 0;
+      aviso("Pedido registrado.");
+    } catch (err) {
+      aviso(errorAmigable(err), true);
+    }
+  });
+
+  function tarjeta(p, botones) {
+    const mapa = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(p.direccion || "");
+    return `
+      <article class="pedido">
+        <div class="pedido-cab">
+          <h3>${esc(p.cliente)}</h3>
+          <span class="badge ${esc(p.estado)}">${esc(ESTADOS[p.estado] || p.estado)}</span>
+        </div>
+        <p>${esc(p.detalle)}</p>
+        <p>📍 ${esc(p.direccion)}</p>
+        <p>📞 ${esc(p.telefono)} · <span class="monto">${dinero(p.monto)}</span></p>
+        ${p.repartidorNombre ? `<p>🛵 ${esc(p.repartidorNombre)}</p>` : ""}
+        <div class="acciones">
+          ${botones}
+          <a class="btn btn-secundario chico" href="tel:${esc(p.telefono)}">Llamar</a>
+          <a class="btn btn-secundario chico" href="${mapa}" target="_blank" rel="noopener">Mapa</a>
+        </div>
+      </article>`;
+  }
+
+  function renderNegocio() {
+    const cont = $("lista-negocio");
+    if (!pedidos.length) {
+      cont.innerHTML = '<p class="vacio">Aún no hay pedidos.</p>';
+      return;
+    }
+    cont.innerHTML = pedidos.map((p) => tarjeta(p,
+      p.estado === "nuevo"
+        ? `<button class="btn btn-peligro chico" data-accion="cancelar" data-id="${esc(p.id)}">Cancelar</button>`
+        : ""
+    )).join("");
+  }
+
+  $("lista-negocio").addEventListener("click", async (e) => {
+    const b = e.target.closest("button[data-accion]");
+    if (!b) return;
+    if (b.dataset.accion === "cancelar" && confirm("¿Cancelar este pedido?")) {
+      try {
+        await updateDoc(doc(db, "pedidos", b.dataset.id), { estado: "cancelado" });
+      } catch (err) { aviso(errorAmigable(err), true); }
+    }
+  });
+
+  // ----- Repartidor -----
+  function cambiarPestana(p) {
+    pestana = p;
+    $("tab-disponibles").classList.toggle("activa", p === "disponibles");
+    $("tab-mios").classList.toggle("activa", p === "mios");
+    renderRepartidor();
+  }
+  $("tab-disponibles").addEventListener("click", () => cambiarPestana("disponibles"));
+  $("tab-mios").addEventListener("click", () => cambiarPestana("mios"));
+
+  function renderRepartidor() {
+    const cont = $("lista-repartidor");
+    const lista = pestana === "disponibles"
+      ? pedidos.filter((p) => p.estado === "nuevo")
+      : pedidos.filter((p) => p.repartidorId === usuario.uid);
+
+    if (!lista.length) {
+      cont.innerHTML = `<p class="vacio">${pestana === "disponibles" ? "No hay pedidos disponibles." : "Aún no tienes entregas."}</p>`;
+      return;
+    }
+    cont.innerHTML = lista.map((p) => {
+      let b = "";
+      if (p.estado === "nuevo") {
+        b = `<button class="btn btn-primario chico" data-accion="tomar" data-id="${esc(p.id)}">Tomar pedido</button>`;
+      } else if (p.estado === "asignado") {
+        b = `<button class="btn btn-primario chico" data-accion="en_camino" data-id="${esc(p.id)}">Salir a entregar</button>`;
+      } else if (p.estado === "en_camino") {
+        b = `<button class="btn btn-ok chico" data-accion="entregado" data-id="${esc(p.id)}">Marcar entregado</button>`;
+      }
+      return tarjeta(p, b);
+    }).join("");
+  }
+
+  $("lista-repartidor").addEventListener("click", async (e) => {
+    const b = e.target.closest("button[data-accion]");
+    if (!b) return;
+    const ref = doc(db, "pedidos", b.dataset.id);
+    b.disabled = true;
+    try {
+      if (b.dataset.accion === "tomar") {
+        await runTransaction(db, async (tx) => {
+          const s = await tx.get(ref);
+          if (!s.exists() || s.data().estado !== "nuevo") throw new Error("Otro repartidor ya tomó este pedido.");
+          tx.update(ref, { estado: "asignado", repartidorId: usuario.uid, repartidorNombre: usuario.nombre });
+        });
+        aviso("Pedido asignado a ti.");
+        cambiarPestana("mios");
+      } else {
+        await updateDoc(ref, { estado: b.dataset.accion });
+      }
+    } catch (err) {
+      aviso(errorAmigable(err), true);
+      b.disabled = false;
+    }
   });
 }
-
-$("authForm").addEventListener("submit",async e=>{
-  e.preventDefault(); if(!configured) return;
-  $("authMessage").textContent="Ingresando…";
-  try{await signInWithEmailAndPassword(auth,$("email").value.trim(),$("password").value);$("authMessage").textContent="";}
-  catch(err){$("authMessage").textContent=authError(err);}
-});
-$("registerBtn").addEventListener("click",async()=>{
-  if(!configured)return;
-  try{await createUserWithEmailAndPassword(auth,$("email").value.trim(),$("password").value);$("authMessage").textContent="Cuenta creada. La primera cuenta será administradora; las siguientes serán repartidoras.";}
-  catch(err){$("authMessage").textContent=authError(err);}
-});
-$("logoutBtn").addEventListener("click",()=>signOut(auth));
-function authError(err){return err.code==="auth/email-already-in-use"?"Ese correo ya está registrado.":err.code==="auth/weak-password"?"La contraseña debe tener al menos 6 caracteres.":"No se pudo completar. Revisa el correo, la contraseña y la configuración de Firebase.";}
-
-function listenOrders(){
-  if(unsubscribeOrders)unsubscribeOrders();
-  const q=query(collection(db,"orders"),orderBy("createdAt","desc"));
-  unsubscribeOrders=onSnapshot(q,snap=>{
-    allOrders=snap.docs.map(d=>({id:d.id,...d.data()}));
-    $("connectionState").textContent="Sincronizado";
-    renderOrders();
-  },err=>{$("connectionState").textContent="Error de conexión";console.error(err);});
-}
-$("locateAddressBtn").addEventListener("click",()=>{
-  if(!navigator.geolocation){$("orderMessage").textContent="Este navegador no permite ubicación.";return;}
-  navigator.geolocation.getCurrentPosition(pos=>{
-    $("lat").value=pos.coords.latitude.toFixed(6);$("lng").value=pos.coords.longitude.toFixed(6);
-    $("orderMessage").textContent="Ubicación agregada.";
-  },()=>{$("orderMessage").textContent="No se pudo obtener la ubicación. Permite el acceso en el navegador.";},{enableHighAccuracy:true,timeout:12000});
-});
-$("orderForm").addEventListener("submit",async e=>{
-  e.preventDefault(); if(!currentUser)return;
-  const order={customer:$("customer").value.trim(),phone:$("phone").value.trim(),address:$("address").value.trim(),details:$("details").value.trim(),amount:Number($("amount").value),deliveryFee:Number($("deliveryFee").value),lat:$("lat").value?Number($("lat").value):null,lng:$("lng").value?Number($("lng").value):null,status:"pending",createdAt:serverTimestamp(),createdBy:currentUser.uid};
-  try{await addDoc(collection(db,"orders"),order);$("orderForm").reset();$("deliveryFee").value="0";$("orderMessage").textContent="¡Pedido enviado! Ya aparece en los dispositivos conectados.";}
-  catch(err){$("orderMessage").textContent="No se pudo enviar. Revisa la conexión y las reglas de Firestore.";console.error(err);}
-});
-document.querySelectorAll(".filter").forEach(btn=>btn.addEventListener("click",()=>{
-  activeFilter=btn.dataset.filter;document.querySelectorAll(".filter").forEach(b=>b.classList.toggle("active",b===btn));renderOrders();
-}));
-function renderOrders(){
-  let orders=allOrders.filter(o=>activeFilter==="all"||o.status===activeFilter);
-  const box=$("ordersList");box.innerHTML="";
-  if(!orders.length){box.innerHTML='<p class="hint">No hay pedidos en esta categoría.</p>';return;}
-  orders.forEach(o=>{
-    const el=document.createElement("article");el.className="order";
-    const total=(Number(o.amount||0)+Number(o.deliveryFee||0)).toFixed(2);
-    el.innerHTML=`<div class="row"><h3>${escapeHtml(o.customer||"Cliente")}</h3><span class="status">${statusNames[o.status]||"Pendiente"}</span></div>
-      <p><b>Teléfono:</b> ${escapeHtml(o.phone||"")}</p><p><b>Dirección:</b> ${escapeHtml(o.address||"")}</p>
-      <p><b>Pedido:</b> ${escapeHtml(o.details||"")}</p><p><b>Total a cobrar:</b> C$ ${total}</p>
-      <div class="orderActions">
-        ${o.lat!=null&&o.lng!=null?`<button class="secondary mapBtn">Abrir mapa</button>`:""}
-        ${o.status==="pending"?'<button class="routeBtn">Marcar en reparto</button>':""}
-        ${o.status==="in_route"?'<button class="doneBtn">Marcar entregado</button>':""}
-      </div>`;
-    if(o.lat!=null&&o.lng!=null)el.querySelector(".mapBtn").addEventListener("click",()=>window.open(`https://www.google.com/maps/dir/?api=1&destination=${o.lat},${o.lng}`,"_blank"));
-    const routeBtn=el.querySelector(".routeBtn");if(routeBtn)routeBtn.addEventListener("click",()=>changeStatus(o.id,"in_route"));
-    const doneBtn=el.querySelector(".doneBtn");if(doneBtn)doneBtn.addEventListener("click",()=>changeStatus(o.id,"delivered"));
-    box.appendChild(el);
-  });
-}
-async function changeStatus(id,status){try{await updateDoc(doc(db,"orders",id),{status,updatedAt:serverTimestamp(),updatedBy:currentUser.uid});}catch(e){alert("No se pudo actualizar el pedido.");}}
-function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
-
-$("sortRouteBtn").addEventListener("click",()=>{
-  const targets=allOrders.filter(o=>o.status!=="delivered"&&Number.isFinite(o.lat)&&Number.isFinite(o.lng));
-  if(!targets.length){alert("Agrega latitud y longitud a los pedidos para ordenar la ruta.");return;}
-  if(!navigator.geolocation){alert("Este navegador no permite ubicación.");return;}
-  navigator.geolocation.getCurrentPosition(pos=>{
-    myPosition={lat:pos.coords.latitude,lng:pos.coords.longitude};
-    let here=myPosition, remaining=[...targets], sorted=[];
-    while(remaining.length){remaining.sort((a,b)=>distance(here,a)-distance(here,b));const next=remaining.shift();sorted.push(next);here={lat:next.lat,lng:next.lng};}
-    const box=$("ordersList");box.innerHTML='<p class="hint"><b>Orden sugerido de ruta</b> · Desde tu ubicación actual, usando la distancia geográfica aproximada.</p>';
-    sorted.forEach((o,i)=>{const el=document.createElement("article");el.className="order";el.innerHTML=`<h3>${i+1}. ${escapeHtml(o.customer)}</h3><p>${escapeHtml(o.address)}</p><p>${statusNames[o.status]||"Pendiente"}</p><button class="secondary">Navegar a este destino</button>`;el.querySelector("button").onclick=()=>window.open(`https://www.google.com/maps/dir/?api=1&origin=${myPosition.lat},${myPosition.lng}&destination=${o.lat},${o.lng}`,"_blank");box.appendChild(el);});
-  },()=>alert("Permite la ubicación para ordenar la ruta."),{enableHighAccuracy:true,timeout:12000});
-});
-function distance(a,b){const r=x=>x*Math.PI/180, dLat=r(b.lat-a.lat),dLng=r(b.lng-a.lng),x=Math.sin(dLat/2)**2+Math.cos(r(a.lat))*Math.cos(r(b.lat))*Math.sin(dLng/2)**2;return 6371*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));}
-
-$("saveSettingsBtn").addEventListener("click",()=>{
-  const name=$("businessName").value.trim()||"JALIMA EXPRESS",color=$("businessColor").value;
-  localStorage.setItem("jalimaName",name);localStorage.setItem("jalimaColor",color);applySettings();
-  const file=$("logoFile").files[0];if(file){const reader=new FileReader();reader.onload=()=>{localStorage.setItem("jalimaLogo",reader.result);applySettings();};reader.readAsDataURL(file);}
-});
-function applySettings(){const name=localStorage.getItem("jalimaName")||"JALIMA EXPRESS",color=localStorage.getItem("jalimaColor")||"#f47721",logo=localStorage.getItem("jalimaLogo")||"./icon.svg";$("brandName").textContent=name;document.documentElement.style.setProperty("--accent",color);$("brandLogo").src=logo;$("businessName").value=name;$("businessColor").value=color;}
-applySettings();
-if("serviceWorker" in navigator)window.addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(console.warn));
